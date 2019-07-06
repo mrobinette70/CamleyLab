@@ -11,16 +11,16 @@ class CellGuy:
         self._length = 100
         self._rho_tot = 80
         self.end = self.position + self._length
-        self.rhos = np.zeros(self._length,float)#+.2 #how did I do this before?
+        self.rhos = np.zeros(self._length,float)
         self.rhos[79:len(self.rhos)-1] = 0.2 * np.random.rand(20)
         
         self.contact = False #changes if in contact with another cell
         self.inh = np.zeros(self._length,float) #this can be updated upon contact
         self.diff_rho = 0.1
-        self.diff_I = 0.1 #find bio relevant
+        self.diff_I = 0.1 #find bio relevant values
         #chem will be a variable in CellPlayground.py
         
-    def react(self, rho_a, rho_b, chem, inh):
+    def react(self, rho_a, rho_b, chem):
         '''
         onrate=b*(k0+gamma*a**2/(K**2+a**2) - beta*inh + omega*chem)
         onrate[onrate<0]=0
@@ -34,13 +34,13 @@ class CellGuy:
     
    
         onrate = rho_b * (k0 + gamma * rho_a**2 / (K**2 + rho_a**2) 
-                 - self.beta*inh + self.omega*chem)
+                - self.beta*self.inh[1:(len(self.inh)-1)] + self.omega*chem)
         onrate[onrate<0] = 0
         offrate = delta * rho_a
         return onrate - offrate
     
     
-    def diffuse(self,rho_in,inh,chem):
+    def diffuse(self,chem):
         '''        Rhos[0]=(Rhos[2]+Rhos[1])/2  
         Rhos[N]=(Rhos[N-2]+Rhos[N-1])/2
         a=np.sum(Rhos)/L     
@@ -48,44 +48,45 @@ class CellGuy:
 
         Rhos2[1:N] = Rhos[1:N] + const*(Rhos[2:N+1]+Rhos[0:N-1]-2*Rhos[1:N]) + h*react_ab(Rhos[1:N],b)
         Rhos,Rhos2 = Rhos2,Rhos'''
-        len_ = len(rho_in)-1       #because Python indexing is weird
-        rho_new = np.zeros(len_+1) #
+        len_ = len(self.rhos)-1       #because Python indexing is weird
+        rho_new = np.zeros(len_+1,float) #
         asteps = self._length/len_
-        h=(asteps/(0.5*Db)) *0.8
-        const = h*self.diff_rho/asteps**2
+        self.h=(asteps/(0.5*self.diff_rho)) *0.008
+        const = self.h*self.diff_rho/asteps**2
         
         
         
         #boundaries
-        rho_in[0] = (rho_in[2]+rho_in[1])/2
-        rho_in[len_] = (rho_in[len_-1]+rho_in[len_-2])/2
+        self.rhos[0] = (self.rhos[2]+self.rhos[1])/2
+        self.rhos[len_] = (self.rhos[len_-1]+self.rhos[len_-2])/2
         if self.contact != False:
             inh2 = np.zeros(len_+1,float)
-         #inward flux
+            #inward flux
             if self.contact == 'left': 
-                inh[0] = self.j/self.diff_I + inh[1]   #(inh[2]+inh[1])/2
-                inh[len_]=(inh[len_-1] + inh[len_-2]) / 2
+                self.inh[0] = self.j/self.diff_I + self.inh[1]   #(inh[2]+inh[1])/2
+                self.inh[len_]=(self.inh[len_-1] + self.inh[len_-2]) / 2
             elif self.contact == 'right':
-                inh[0]=(inh[2]+inh[1]) / 2
-                inh[len_]=self.j/self.diff_I + inh[len_-1]
-            inh2[1:len_] = inh[1:len_] + const*(
-                           inh[2:len_+1]+inh[0:len_-1]-2*inh[1:len_])
+                self.inh[0]=(self.inh[2]+self.inh[1]) / 2
+                self.inh[len_]=self.j/self.diff_I + self.inh[len_-1]
+            #diffuse
+            inh2[1:len_] = self.inh[1:len_] + const*(
+                           self.self.inh[2:len_+1]+self.inh[0:len_-1]-2*self.inh[1:len_])
             
-            inh2,inh = inh,inh2
-            
+            #inh2,self.inh = self.inh,inh2
+            self.inh = inh2
             
             
         #conservation of Rho
-        rho_a = np.sum(rho_in)/self._length
-        rho_b = (self._rho_tot - rho_a*self._length)/self._length
+        self.rho_a = np.sum(self.rhos)/self._length
+        self.rho_b = (self._rho_tot - self.rho_a*self._length)/self._length
         
         #RDE
-        rho_new[0] = rho_in[0]; rho_new[len_-1] = rho_in[len_-1]
-        rho_new[1:len_] = rho_in[1:len_] + const*(
-                          rho_in[2:len_+1]+rho_in[0:len_-1]-2*rho_in[1:len_]) + h*self.react(rho_a[1:len_],rho_b,inh[1:len_],chem[1:len_])
-        rho_in,rho_new = rho_new,rho_in
-        
-        return rho_new
+        rho_new[0] = self.rhos[0]; rho_new[len_-1] = self.rhos[len_-1]
+        rho_new[1:len_] = self.rhos[1:len_] + const*(self.rhos[2:len_+1]+self.rhos[0:len_-1]-2*self.rhos[1:len_]) + self.h*self.react(self.rhos[1:len_],self.rho_b,chem[self.position+1:self.end-1]) #might be too long?
+        #rho_new += self.h*self.react(self.rhos[1:len_],self.rho_b,chem[self.position:self.end])
+        #rho_in,rho_new = rho_new,rho_in                                                h*react_CI(Rhos[1:N],b,inh[1:N],chem[1:N])
+        self.rhos = rho_new
+        #return rho_new
     
             
     def move(self,rho_profile):
