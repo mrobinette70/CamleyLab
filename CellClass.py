@@ -11,7 +11,8 @@ class CellGuy:
         self._length = 100
         self._rho_tot = 80
         self.end = self.position + self._length
-        self.rhos = np.zeros(self._length,float)+.2 #how did I do this before?
+        self.rhos = np.zeros(self._length,float)#+.2 #how did I do this before?
+        self.rhos[79:len(self.rhos)-1] = 0.2 * np.random.rand(20)
         
         self.contact = False #changes if in contact with another cell
         self.inh = np.zeros(self._length,float) #this can be updated upon contact
