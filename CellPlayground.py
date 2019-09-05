@@ -8,7 +8,30 @@ Created on Fri Jul  5 15:06:54 2019
 Questions:
     Should inh be wiped after contact ends? Or should the inhibitor be allowed to 
     keep diffusing?
-    
+
+Notes:
+    In fourcells_good.png:
+        Four cells, started from random Rho distributions. All four cells 
+        (fortunately) oriented toward the center, so we get to see CIL for all 
+        of them. No chemoattractant now, but testing tallying implementation in 
+        CellTest class. 3 and 4 are working perfectly - c3 has 2 contacts, and 
+        c4 has 1 (validated by inspecting the picture). Interestingly, c1 has 1155, 
+        and c2 has 1156 - I'm assuming c1 would hit c2, direct slightly away, repolarize 
+        and hit c2 again. These cells would probably be very close in vivo without touching 
+        after the first separation, but the rounding done to calculate new positions
+        pushed them back together. Left and right tallies also worked well, even for 
+        c1 and c2. These numbers may be 1 higher than seen in the png, since the
+        cells start at random distributions, and a cell may start looking like a left-facing
+        cell due to randomness and polarize to the right.
+        c1.left_tally = 1; c1.right_tally = 1
+        c2.left_tally = 0; c2.right_tally = 1
+        c3.left_tally = 1; c3.right_tally = 0
+        c4.left_tally = 0; c4.right_tally = 1
+        The +1 discrepancy is probably not an issue. This will be checked when starting
+        from a polarized state - if it's still coming up then, the way I determine 
+        direction or velocity may be wrong. Can also be checked by plotting Rhos 
+        for all cells over time in one of these heatmaps, which is much easier to see.
+        
 
 """
 
@@ -18,17 +41,19 @@ import matplotlib.pyplot as plt
 from CellTest import CellTest
 
 
-env_length = 50000
+env_length = 40000
 cell_env = np.zeros(env_length,float)
-#env_chem = np.zeros(env_length,float)#
-env_chem = np.linspace(0,100,env_length)
+env_chem = np.zeros(env_length,float)#
+#env_chem = np.linspace(0,100,env_length)
 c1 = CellTest(start_loc=7500,beta=.1,j=1,omega=.9)
-c2 = CellTest(start_loc=500, beta=.1,j=1,omega=1)
+c2 = CellTest(start_loc=10000, beta=.1,j=1,omega=0.1)
 c3 = CellTest(start_loc=12000,beta=.1,j=1,omega=0.01)
-c4 = CellTest(start_loc=10000, beta=.1,j=1,omega=0.1)
+c4 = CellTest(start_loc=25000, beta=.1,j=1,omega=1)
 
-c2.Rhos=np.zeros(c2.N+1)
-c2.Rhos[81:c2.N+1] = 0.2
+
+
+c1.Rhos=np.zeros(c2.N+1)
+c1.Rhos[81:c2.N+1] = 0.2
 #plt.plot(c1.rhos,'.')
 
 def boundary_check(cells, env_length):
@@ -55,6 +80,9 @@ def boundary_check(cells, env_length):
         
             c.position += howmany
             c.end += howmany
+            
+            if c.left_contact == False: #the cell is being newly contacted
+                c.contact_tally += 1
             c.left_contact = True
         else:
             c.left_contact = False
@@ -62,8 +90,12 @@ def boundary_check(cells, env_length):
         if cell_env[c.end+1] != 0: #there's a cell to the right
             cellnum = cell_env[c.end+1] #number of the other cell
             howmany = np.count_nonzero(cell_env[c.position:c.end+1] == cellnum)
+            
             c.position -= howmany
             c.end -= howmany
+            
+            if c.right_contact == False: #the cell is being newly contacted
+                c.contact_tally += 1 
             c.right_contact = True
         else:
             c.right_contact = False
@@ -127,7 +159,8 @@ print('Start and end: ',c1.position,', ',c1.end)
 print(' ')
 
 counter = 0
-tg = build_timegraph(c1.h, t_end, env_length, every=1)
+increment = 5
+tg = build_timegraph(c1.h, t_end, env_length, every=increment)
 
 while t < t_end:
     for c in cells:
@@ -144,14 +177,17 @@ while t < t_end:
         if c2.right_contact == True:
             print(t)
         '''    
-    #boundary_check([cell_list])
+    
     t += c1.h
+    
+        
     boundary_check(cells,env_length)
-    allcells = place_cells(cells, env_length)
-
-    ''' filling array to have cells over time '''
-    ###fill array at [counter,:]
-    tg[counter,:] = allcells
+    
+    if counter % increment == 0:
+        ''' filling array to have cells over time '''
+        allcells = place_cells(cells, env_length)
+        tg[int(counter/increment),:] = allcells
+        
     counter += 1
     
 

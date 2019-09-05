@@ -11,11 +11,11 @@ class CellTest:
     #initialize Rhos as a random dist (or something)
     
     #Shouldn't be changed - if there's a problem, one of these might be changed by mistake
-    L=10                      # Cell length
-    Da=0.1                    # Rho diffusion constant (in membrane)
+    L=10                      # Cell length (um)
+    Da=0.1                    # Rho diffusion constant (in membrane) (um2 s-1)
     Db=10                     # Rho diffusion constant (in cytosol) - not used in this implementation
     Ntot=80                   # Total amount of Rho in cell (maybe this could be variable too?)
-                              # Ntot was something smaller in the paper used - ~28 (change back before tuning parameters)
+                              # Ntot was something smaller in the paper used - 22.6833 (change back before tuning parameters)
     
     k0=0.067                  # Constants for RDE
     delta=1                   # 
@@ -33,7 +33,7 @@ class CellTest:
     
     #def rho_CI(Rhos_in,beta=0.05,j=0.05,Di=0.1,omega=0.7,chem_max=0.5): #all of the parameters I'd like to test
     def __init__(self, start_loc, beta=0.05, 
-                 j=0.05, Di=0.1, omega=0.7): #customizable inputs
+                 j=0.05, Di=10, omega=0.7): #customizable inputs
         
         self.beta = beta
         self.j = 0
@@ -44,7 +44,7 @@ class CellTest:
         self.position = start_loc
         self.end = self.position + self.N
        
-        self.Rhos = np.random.random(size=self.N+1)*.3
+        self.Rhos = np.random.random(size=self.N+1)*.3 #to be changed to loading premade polarized cells (or as an option: left, right, random?)
         #self.Rhos=np.zeros((self.N+1),float)
         #self.Rhos[81:self.N+1]=0.2
         #self.Rhos[0:20] = 0.2
@@ -54,9 +54,22 @@ class CellTest:
         #self.contact = False #False, 'left', or 'right' or 'both'
         self.left_contact = False
         self.right_contact = False
-        'maybe instead this should be left_contact or right_contact instead of contact'
-
-    
+        
+        #Tallies (for parameter tuning)
+        self.direction = None      #right or left
+        self.new_direction = None  #right or left
+        self.left_tally = 0        #if the cell changes to go left
+        self.right_tally = 0       #if the cell changes to go right
+        self.contact_tally = 0     #total number of cell contacts (may need to divide this by 2 at the end after summing all cells)
+        
+        dir_num = self.Rhos[self.N] - self.Rhos[0] #change this for new velocity function??
+        if dir_num >= 0:
+            self.direction = 'right'
+        elif dir_num < 0:
+            self.direction = 'left'
+            
+        self.positions = []
+        
     def react_CI(self, a, b, inh, chem):
         '''
         Reaction part of RDE - wave-pinning model from Mori et. al, balancing
@@ -179,8 +192,30 @@ class CellTest:
             ^^ Should vel be calculated somewhere else then? Either as another method or 
             as a function in the environment that accesses rho?
         '''
-        self.vel = 100*(self.Rhos[self.N] - self.Rhos[0])
-        self.roundvel = int(np.rint(self.vel))
+        self.positions.append(self.position) #only for checking contact_tally - this is awful
+        
+        def calc_vel():
+            cm = np.floor(self.N/2)
+            self.vel = np.sum([(idx-cm)*val for idx,val in enumerate(self.Rhos)])
+            self.roundvel = int(np.rint(.005*self.vel))
+         
+        
+        #self.vel = 10*(self.Rhos[self.N] - self.Rhos[0])
+        
+        calc_vel()
+        
+        if self.vel >= 0:
+            self.new_direction = 'right'
+        elif self.vel < 0:
+            self.new_direction = 'left'
+            
+        if self.direction == 'left' and self.new_direction == 'right':
+            self.right_tally += 1
+        elif self.direction == 'right' and self.new_direction == 'left':
+            self.left_tally += 1
+            
+        self.direction = self.new_direction
+        self.new_direction = None
         
         #vel > 0: move right
         if self.vel > 0 and self.right_contact == True: #unless contacting another cell!
