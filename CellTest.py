@@ -32,8 +32,8 @@ class CellTest:
      # Creates a random distribution of Rho in cell
     
     #def rho_CI(Rhos_in,beta=0.05,j=0.05,Di=0.1,omega=0.7,chem_max=0.5): #all of the parameters I'd like to test
-    def __init__(self, start_loc, beta=0.05, 
-                 j=0.05, Di=10, omega=0.7): #customizable inputs
+    def __init__(self, start_loc, beta=0.07, 
+                 j=0.4, Di=10, omega=0.05, polarity='random'): #customizable inputs
         
         self.beta = beta
         self.j = 0
@@ -43,15 +43,23 @@ class CellTest:
         
         self.position = start_loc
         self.end = self.position + self.N
-       
-        self.Rhos = np.random.random(size=self.N+1)*.3 #to be changed to loading premade polarized cells (or as an option: left, right, random?)
-        #self.Rhos=np.zeros((self.N+1),float)
-        #self.Rhos[81:self.N+1]=0.2
-        #self.Rhos[0:20] = 0.2
+        if polarity == 'random':
+            self.Rhos = np.random.random(size=self.N+1)*.1 #to be changed to loading premade polarized cells (or as an option: left, right, random?)
+        elif polarity == 'left':
+            self.Rhos = np.load('left_polarized.npy')
+            self.Rhos += (np.random.random(len(self.Rhos))-0.5)*1.3 #adding a little randomness
+            self.Rhos[self.Rhos < 0] = 0
+        elif polarity == 'right':
+            self.Rhos = np.load('right_polarized.npy')
+            self.Rhos += (np.random.random(len(self.Rhos))-0.5)*1.3 #adding a little randomness
+            self.Rhos[self.Rhos < 0] = 0
+        
+        
+
         self.Rhos2 = np.zeros((self.N+1),float)
         self.inh=np.zeros((self.N+1),float)
         self.inh2=np.zeros((self.N+1),float)
-        #self.contact = False #False, 'left', or 'right' or 'both'
+
         self.left_contact = False
         self.right_contact = False
         
@@ -68,7 +76,7 @@ class CellTest:
         elif dir_num < 0:
             self.direction = 'left'
             
-        self.positions = []
+        #self.positions = []
         
     def react_CI(self, a, b, inh, chem):
         '''
@@ -91,9 +99,10 @@ class CellTest:
             Chemoattractant profile of the environment. The RDE uses the chemoattractant within the 
             length of the cell to determine chemotaxis
         '''    
-        onrate=b*(self.k0+self.gamma*a**2/(self.K**2+a**2)
-                - self.beta*inh + self.omega*chem)
-        onrate[onrate<0]=0
+        onrate = b * (self.k0 + self.gamma*a**2/(self.K**2 + a**2)
+               - self.beta * inh #this might be good enough - not sure how to model saturation without having data on it 
+               + self.omega * (chem/(4.15+chem))) #adding saturation - based on empirical data for best gradient
+        onrate[onrate < 0] = 0
         offrate = self.delta*a
         #this is the RDE, including an inhibitor that propels Rho away and a chemoattractant
         return (onrate - offrate)
@@ -140,7 +149,7 @@ class CellTest:
             inh[N]=self.j 
             inh2[0]=inh[0]; inh2[N]=inh[N]
             
-            inh[0] = self.j/self.Di + inh[1] #check the sign here
+            inh[0] = self.j/self.Di + inh[1] 
             inh[N] = self.j/self.Di + inh[N-1]
         elif self.left_contact == True:
             inh[0]=self.j 
@@ -159,25 +168,18 @@ class CellTest:
             inh[N] = 0
             
         Rhos[0]=(Rhos[2]+Rhos[1])/2
+        Rhos[N]=(Rhos[N-2]+Rhos[N-1])/2 
         
-        Rhos[N]=(Rhos[N-2]+Rhos[N-1])/2    
-        a=np.sum(Rhos)/self.L     
+        a=np.sum(Rhos)/self.L          
         b=(self.Ntot-a*self.L)/self.L
 
-        #diffusion and RD for inhibitor and Rho
+
         inh2[1:N] = inh[1:N] + self.const*(inh[2:N+1]+inh[0:N-1]-2*inh[1:N])
-        #print('Chem len: ',len(chem[self.position:self.end-1]))
         Rhos2[1:N] = Rhos[1:N] + self.const*(Rhos[2:N+1]+Rhos[0:N-1]-2*Rhos[1:N]) + self.h*self.react_CI(Rhos[1:N],b,inh[1:N],chem[1:N])#[self.position:self.end-1])
- 
-        #Rhos,Rhos2 = Rhos2,Rhos
-        #inh,inh2 = inh2,inh
-        #Rhos[0] = Rhos[1]
-        #Rhos[N] = Rhos[N-1]
 
 
-
-        self.Rhos = Rhos2 #equivalent to a return     #, chem, inh
-        self.inh = inh2   #profile of inhibitor
+        self.Rhos = Rhos2 #equivalent to a return     
+        self.inh = inh2
         
     def move(self):
         '''
@@ -192,12 +194,12 @@ class CellTest:
             ^^ Should vel be calculated somewhere else then? Either as another method or 
             as a function in the environment that accesses rho?
         '''
-        self.positions.append(self.position) #only for checking contact_tally - this is awful
+        #self.positions.append(self.position) #only for checking contact_tally - this is awful
         
         def calc_vel():
             cm = np.floor(self.N/2)
-            self.vel = np.sum([(idx-cm)*val for idx,val in enumerate(self.Rhos)])
-            self.roundvel = int(np.rint(.005*self.vel))
+            self.vel = .037*np.sum([(idx-cm)*val for idx,val in enumerate(self.Rhos)])
+            self.roundvel = int(np.rint(self.vel))
          
         
         #self.vel = 10*(self.Rhos[self.N] - self.Rhos[0])
@@ -226,16 +228,3 @@ class CellTest:
             self.position += self.roundvel
             self.end += self.roundvel
             
-    #def update(self):
-     #   if                     
-'''
-t=0
-
-
-while t < 100:
-
-    c.diffuse(100)
-    if int(t) % 20 == 0:
-        plt.plot(c.Rhos)
-    t += c.h
-'''
